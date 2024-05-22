@@ -1,24 +1,30 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-import { mount, flushPromises } from '@vue/test-utils'
+import { defineProps, defineEmits } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 
-const query = ref('')
+const emit = defineEmits(['search'])
 
-function submit(): string {
-  axios
-    .get('http://localhost:8000/search', {
-      params: {
-        query: query.value
-      }
-    })
-    .then((response) => {
-      console.log(response.data)
-    })
-    .catch((error) => {
-      console.log(error)
-    })
-  return query.value
+const searchBarText = ref('')
+const response = ref([])
+
+const submit = async () => {
+  try {
+    const { data } = await axios.get(`http://localhost:8000/search?query=${searchBarText.value}`)
+    const tracks = data.tracks.items.map((track: any) => ({
+      id: track.id,
+      song_title: track.name,
+      artist: track.artists[0].name,
+      album: track.album.name,
+      image_url: track.album.images[0].url,
+      playback: track.preview_url
+    }))
+    emit('search', tracks)
+    flushPromises()
+  } catch (error) {
+    console.error(error)
+  }
 }
 </script>
 
@@ -26,7 +32,7 @@ function submit(): string {
   <div class="md:container md:mx-auto px-3">
     <input
       type="text"
-      v-model.lazy="query"
+      v-model.lazy="searchBarText"
       placeholder="Houdini - Dua Lipa"
       class="input input-bordered input-secondary input-lg w-full max-w-xs mr-2"
     />
