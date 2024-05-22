@@ -4,9 +4,25 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from models import AccessTokenResponseModel
 from token_cache import TokenCache
 from utils.url_creation import make_url_query_string
+
+app = FastAPI()
+
+origins = [
+    "http://localhost",
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 load_dotenv()
 token_cache = TokenCache()
@@ -19,7 +35,6 @@ CLIENT_SECRET: str = os.getenv('CLIENT_SECRET')
 SPOTIFY_TOKEN_URL:  str = 'https://accounts.spotify.com/api/token'
 SPOTIFY_SEARCH_URL: str = 'https://api.spotify.com/v1/search'
 
-app = FastAPI()
 
 @app.get("/")
 async def root():
@@ -62,12 +77,7 @@ async def get_access_token():
 
 
 @app.get("/search")
-async def search(track: str = '', 
-                 artist: str = '', 
-                 album: str = '', 
-                 search_type: str = 'track', 
-                 limit: int = 10, 
-                 offset: int = 0):
+async def search(query: str):
 
     if token_cache.expiration_time is None or token_cache.expiration_time <= datetime.now(timezone.utc):
         await fetch_new_token()
@@ -76,10 +86,10 @@ async def search(track: str = '',
         'Authorization': 'Bearer ' + token_cache.access_token
     }
 
-    query = make_url_query_string(track, artist, album, search_type, limit, offset)
+    search_query = make_url_query_string(query)
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(SPOTIFY_SEARCH_URL + query, headers=headers)
+        response = await client.get(SPOTIFY_SEARCH_URL + search_query, headers=headers)
 
         if response.status_code == 200:
             search_results = response.json()
