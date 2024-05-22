@@ -4,8 +4,9 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from models import AccessTokenResponseModel, SearchModel
+from models import AccessTokenResponseModel
 from token_cache import TokenCache
+from utils.url_creation import make_url_query_string
 
 load_dotenv()
 token_cache = TokenCache()
@@ -16,7 +17,7 @@ CLIENT_SECRET: str = os.getenv('CLIENT_SECRET')
 
 # Endpoints
 SPOTIFY_TOKEN_URL:  str = 'https://accounts.spotify.com/api/token'
-SPOTIFY_SEARCH_URL: str = 'https://accounts.spotify.com/v1/search'
+SPOTIFY_SEARCH_URL: str = 'https://api.spotify.com/v1/search'
 
 app = FastAPI()
 
@@ -60,25 +61,28 @@ async def get_access_token():
     )
 
 
-@app.get("/search-song", response_model=SearchModel)
-async def search(search_model: SearchModel):
+@app.get("/search")
+async def search(track: str = '', 
+                 artist: str = '', 
+                 album: str = '', 
+                 search_type: str = 'track', 
+                 limit: int = 10, 
+                 offset: int = 0):
+
+    if token_cache.expiration_time is None or token_cache.expiration_time <= datetime.now(timezone.utc):
+        await fetch_new_token()
 
     headers = {
-        'Authorization': 'Bearer'
+        'Authorization': 'Bearer ' + token_cache.access_token
     }
 
+    query = make_url_query_string(track, artist, album, search_type, limit, offset)
+
     async with httpx.AsyncClient() as client:
-        response = await client.get(SPOTIFY_SEARCH_URL, headers=headers, data=search_model)
+        response = await client.get(SPOTIFY_SEARCH_URL + query, headers=headers)
 
         if response.status_code == 200:
             search_results = response.json()
             return search_results
         else:
             raise HTTPException(status_code=response.status_code, detail=response.text)
-
-@app.get("/token-cache")
-async def get_token_parameters():
-    return {'message': {
-        'access_token': token_cache.access_token,
-        'expires_at': token_cache.expiration_time
-    }}
